@@ -1,0 +1,303 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8" />
+  <title>Chef Jump</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no" />
+  <style>
+    html, body {
+      margin: 0;
+      padding: 0;
+      overflow: hidden;
+      touch-action: manipulation;
+    }
+    canvas {
+      display: block;
+      background: linear-gradient(#d0f0ff, #ffffff);
+    }
+    #gameOverScreen {
+      position: fixed;
+      top: 0; left: 0;
+      width: 100vw; height: 100vh;
+      background: rgba(0,0,0,0.7);
+      color: #fff;
+      display: none;
+      flex-direction: column;
+      justify-content: center;
+      align-items: center;
+      font-family: sans-serif;
+      z-index: 10;
+    }
+    #gameOverScreen h1 { margin: 0 0 10px; }
+    #restartBtn {
+      padding: 10px 20px;
+      font-size: 18px;
+      background: #ff6b6b;
+      color: #fff;
+      border: none;
+      border-radius: 8px;
+      margin-top: 20px;
+    }
+    #highScores {
+      margin-top: 20px;
+      text-align: center;
+    }
+  </style>
+</head>
+<body>
+  <canvas id="gameCanvas"></canvas>
+
+  <div id="gameOverScreen">
+    <h1>Игра окончена</h1>
+    <div id="finalScore"></div>
+    <button id="restartBtn">Сыграть снова</button>
+    <div id="highScores">
+      <h3>Топ-5 рекордов</h3>
+      <ul id="scoreList" style="list-style:none; padding:0;"></ul>
+    </div>
+  </div>
+
+  <script>
+    const canvas = document.getElementById("gameCanvas");
+    const ctx = canvas.getContext("2d");
+
+    // Устанавливаем размеры canvas на текущий размер окна
+    function resizeCanvas() {
+      canvas.width = window.innerWidth;
+      canvas.height = window.innerHeight;
+    }
+    resizeCanvas();
+    window.addEventListener('resize', resizeCanvas);
+
+    const chefImg = new Image();
+    chefImg.src = "chef.png";
+
+    const coinImg = new Image();
+    coinImg.src = "coin.png";
+
+    const boostImg = new Image();
+    boostImg.src = "boost.png";
+
+    let platforms = [];
+    let coins = [];
+    let boosts = [];
+    let gravity = 0.4;
+    let difficulty = 1;
+
+    let player = {
+      x: canvas.width / 2 - 20,
+      y: canvas.height - 80,
+      width: 40,
+      height: 40,
+      velocityY: 0,
+      jumpStrength: -10,
+      coinCount: 0
+    };
+
+    let score = 0;
+    let isGameOver = false;
+
+    function resetGame() {
+      platforms = [];
+      coins = [];
+      boosts = [];
+      gravity = 0.4;
+      difficulty = 1;
+      player.y = canvas.height - 80;
+      player.x = canvas.width / 2 - 20;
+      player.velocityY = 0;
+      player.coinCount = 0;
+      score = 0;
+      isGameOver = false;
+      document.getElementById("gameOverScreen").style.display = "none";
+      createPlatforms();
+      gameLoop();
+    }
+
+    function createPlatforms() {
+      const count = 10;
+      for (let i = 0; i < count; i++) {
+        platforms.push({
+          x: Math.random() * (canvas.width - 60),
+          y: canvas.height - i * (canvas.height / count),
+          width: 60,
+          height: 10
+        });
+      }
+    }
+
+    function drawPlayer() {
+      ctx.drawImage(chefImg, player.x, player.y, player.width, player.height);
+    }
+
+    function drawPlatforms() {
+      ctx.fillStyle = "#4CAF50";
+      platforms.forEach(p => ctx.fillRect(p.x, p.y, p.width, p.height));
+    }
+
+    function drawCoins() {
+      coins.forEach(c => ctx.drawImage(coinImg, c.x, c.y, c.size, c.size));
+    }
+
+    function drawBoosts() {
+      boosts.forEach(b => ctx.drawImage(boostImg, b.x, b.y, b.size, b.size));
+    }
+
+    function spawnCoin(x, y) {
+      coins.push({ x, y, size: 24 });
+    }
+
+    function spawnBoost(x, y) {
+      boosts.push({ x, y, size: 28 });
+    }
+
+    function movePlayer() {
+      player.velocityY += gravity;
+      player.y += player.velocityY;
+
+      if (player.y < canvas.height / 2) {
+        const dy = canvas.height / 2 - player.y;
+        player.y = canvas.height / 2;
+        platforms.forEach(p => p.y += dy);
+        coins.forEach(c => c.y += dy);
+        boosts.forEach(b => b.y += dy);
+        score += Math.floor(dy / 10);
+        difficulty += 0.0005 * dy;
+      }
+
+      platforms.forEach((p, i) => {
+        if (
+          player.velocityY > 0 &&
+          player.x + player.width > p.x &&
+          player.x < p.x + p.width &&
+          player.y + player.height >= p.y &&
+          player.y + player.height <= p.y + p.height
+        ) {
+          player.velocityY = player.jumpStrength;
+          if (Math.random() < 0.3) spawnCoin(p.x + 10, p.y - 30);
+          if (Math.random() < 0.1) spawnBoost(p.x + 25, p.y - 40);
+        }
+
+        if (p.y > canvas.height) {
+          platforms.splice(i, 1);
+          platforms.push({
+            x: Math.random() * (canvas.width - 60),
+            y: 0,
+            width: 60,
+            height: 10
+          });
+        }
+      });
+
+      coins.forEach((c, i) => {
+        if (
+          player.x + player.width > c.x &&
+          player.x < c.x + c.size &&
+          player.y + player.height > c.y &&
+          player.y < c.y + c.size
+        ) {
+          coins.splice(i, 1);
+          player.coinCount++;
+        }
+      });
+
+      boosts.forEach((b, i) => {
+        if (
+          player.x + player.width > b.x &&
+          player.x < b.x + b.size &&
+          player.y + player.height > b.y &&
+          player.y < b.y + b.size
+        ) {
+          boosts.splice(i, 1);
+          player.velocityY = -20; // супер-прыжок
+        }
+      });
+
+      if (player.y > canvas.height) endGame();
+    }
+
+    function drawScore() {
+      ctx.fillStyle = "black";
+      ctx.font = "20px sans-serif";
+      ctx.fillText("Очки: " + score, 10, 30);
+      ctx.fillText("Монеты: " + player.coinCount, 10, 60);
+    }
+
+    function gameLoop() {
+      if (isGameOver) return;
+
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+      drawPlatforms();
+      drawCoins();
+      drawBoosts();
+      movePlayer();
+      drawPlayer();
+      drawScore();
+
+      gravity = 0.4 * difficulty;
+      requestAnimationFrame(gameLoop);
+    }
+
+    function endGame() {
+      isGameOver = true;
+      document.getElementById("finalScore").innerText =
+        `Очки: ${score}, Монеты: ${player.coinCount}`;
+      saveHighScore(score, player.coinCount);
+      showHighScores();
+      document.getElementById("gameOverScreen").style.display = "flex";
+    }
+
+    function saveHighScore(score, coins) {
+      const name = "Игрок";
+      const record = { name, score, coins };
+      const records = JSON.parse(localStorage.getItem("chefRecords") || "[]");
+      records.push(record);
+      records.sort((a, b) => b.score - a.score);
+      localStorage.setItem("chefRecords", JSON.stringify(records.slice(0, 5)));
+    }
+
+    function showHighScores() {
+      const list = document.getElementById("scoreList");
+      list.innerHTML = "";
+      const records = JSON.parse(localStorage.getItem("chefRecords") || "[]");
+      records.forEach(r => {
+        const li = document.createElement("li");
+        li.textContent = `${r.name}: ${r.score} очков, ${r.coins} монет`;
+        list.appendChild(li);
+      });
+    }
+
+    // Управление с ограничением по границам экрана
+    document.addEventListener("keydown", e => {
+      if (e.key === "ArrowLeft") player.x = Math.max(0, player.x - 25);
+      else if (e.key === "ArrowRight") player.x = Math.min(canvas.width - player.width, player.x + 25);
+    });
+
+    canvas.addEventListener("touchstart", e => {
+      const x = e.touches[0].clientX;
+      if (x < canvas.width / 2) player.x = Math.max(0, player.x - 25);
+      else player.x = Math.min(canvas.width - player.width, player.x + 25);
+    });
+
+    document.getElementById("restartBtn").addEventListener("click", resetGame);
+
+    // Запуск игры после загрузки всех изображений
+    let imagesLoaded = 0;
+    const totalImages = 3;
+
+    function onImageLoad() {
+      imagesLoaded++;
+      if (imagesLoaded === totalImages) {
+        createPlatforms();
+        gameLoop();
+      }
+    }
+
+    chefImg.onload = onImageLoad;
+    coinImg.onload = onImageLoad;
+    boostImg.onload = onImageLoad;
+
+  </script>
+</body>
+</html>
+
